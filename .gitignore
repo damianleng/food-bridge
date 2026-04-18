@@ -50,3 +50,9 @@ pnpm-debug.log*
 
 # OS
 Thumbs.db
+
+# Ignore CLAUDE.MD file
+CLAUDE.md
+
+# ignore data/
+data/
