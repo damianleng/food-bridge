@@ -13,7 +13,7 @@ export interface Profile {
   goals: string[];
   conditions: string[];
   smoking: Smoking | "";
-  medications: string;
+  medications: string[];
   adults: number;
   children: number;
 }
@@ -62,7 +62,7 @@ interface AppState {
 
 const emptyProfile: Profile = {
   height: "", weight: "", age: "", sex: "", activity: "",
-  goals: [], conditions: [], smoking: "", medications: "",
+  goals: [], conditions: [], smoking: "", medications: [],
   adults: 1, children: 0,
 };
 

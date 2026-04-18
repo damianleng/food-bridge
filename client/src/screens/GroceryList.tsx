@@ -18,6 +18,21 @@ interface ParsedGrocery {
   rawFallback?: string;
 }
 
+function parseItem(i: Record<string, unknown>, category?: string): GroceryItem {
+  const priceRaw = i.estimated_unit_price_usd ?? i.price ?? i.estimated_price ?? i.cost;
+  const price = typeof priceRaw === "number" ? priceRaw : Number(String(priceRaw ?? "").replace(/[^\d.]/g, "")) || 0;
+  const src = String(i.price_source ?? i.source ?? "").toLowerCase();
+  const qty = i.quantity_needed ?? i.quantity;
+  return {
+    name: String(i.description ?? i.name ?? i.food ?? "Item"),
+    brand: (i.brand_name ?? i.brand) as string | undefined,
+    quantity: qty != null ? `x${qty}` : undefined,
+    price,
+    source: src.includes("open") || src.includes("live") ? "live" : src.includes("est") ? "estimate" : undefined,
+    category,
+  };
+}
+
 function parseGrocery(text: string): ParsedGrocery {
   const result: ParsedGrocery = { items: [], total: 0 };
   if (!text) return result;
@@ -26,32 +41,46 @@ function parseGrocery(text: string): ParsedGrocery {
   if (jsonMatch) {
     try {
       const obj = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-      const items = (obj.items ?? obj.grocery_list ?? obj.list) as unknown[] | undefined;
-      if (Array.isArray(items)) {
-        result.items = items.map((it) => {
-          const i = it as Record<string, unknown>;
-          const priceRaw = i.price ?? i.estimated_price ?? i.cost;
-          const price = typeof priceRaw === "number" ? priceRaw : Number(String(priceRaw ?? "").replace(/[^\d.]/g, "")) || 0;
-          const src = String(i.source ?? i.price_source ?? "").toLowerCase();
-          return {
-            name: String(i.name ?? i.food ?? "Item"),
-            brand: i.brand as string | undefined,
-            quantity: i.quantity as string | undefined,
-            price,
-            source: src.includes("live") ? "live" : (src.includes("est") ? "estimate" : undefined),
-            category: i.category as string | undefined,
-          };
-        });
+
+      const totalRaw = obj.total_estimated_cost_usd ?? obj.total ?? obj.estimated_total ?? obj.total_cost;
+      result.total = typeof totalRaw === "number" ? totalRaw : Number(String(totalRaw ?? "").replace(/[^\d.]/g, "")) || 0;
+
+      // Case 1: grocery_list is an object keyed by category
+      const groceryList = obj.grocery_list ?? obj.items ?? obj.list;
+      if (groceryList && typeof groceryList === "object" && !Array.isArray(groceryList)) {
+        for (const [cat, catItems] of Object.entries(groceryList as Record<string, unknown>)) {
+          if (Array.isArray(catItems)) {
+            for (const it of catItems) {
+              result.items.push(parseItem(it as Record<string, unknown>, cat));
+            }
+          }
+        }
+        if (result.items.length) return result;
       }
-      const totalRaw = obj.total ?? obj.estimated_total ?? obj.total_cost;
-      result.total = typeof totalRaw === "number" ? totalRaw : Number(String(totalRaw ?? "").replace(/[^\d.]/g, "")) || result.items.reduce((s, i) => s + (i.price ?? 0), 0);
-      if (result.items.length) return result;
+
+      // Case 2: flat array
+      if (Array.isArray(groceryList)) {
+        result.items = groceryList.map((it) => parseItem(it as Record<string, unknown>));
+        if (result.items.length) return result;
+      }
     } catch { /* ignore */ }
   }
 
   result.rawFallback = text;
   return result;
 }
+
+const CATEGORY_ICONS: Record<string, string> = {
+  "Meat & Seafood": "🍗", "Meat": "🍗", "Seafood": "🐟",
+  "Dairy & Eggs": "🥛", "Dairy": "🥛", "Eggs": "🥚",
+  "Produce": "🥦", "Vegetables": "🥦", "Fruit": "🍎",
+  "Grains & Legumes": "🌾", "Grains": "🌾", "Legumes": "🫘",
+  "Beans & Legumes": "🫘", "Snacks": "🍿", "Beverages": "🧃",
+  "Frozen": "🧊", "Fats & Oils": "🫙", "Other": "📦",
+};
+
+const categoryIcon = (cat: string) =>
+  CATEGORY_ICONS[cat] ?? Object.entries(CATEGORY_ICONS).find(([k]) => cat.toLowerCase().includes(k.toLowerCase()))?.[1] ?? "🛒";
 
 const GroceryList = () => {
   const { groceryResponse, preferences, reset } = useApp();
@@ -117,7 +146,7 @@ const GroceryList = () => {
         {grouped.map(([cat, items]) => (
           <section key={cat} className="space-y-3">
             <div className="flex items-baseline justify-between border-b border-foreground pb-2">
-              <h2 className="font-bold text-lg">{cat}</h2>
+              <h2 className="font-bold text-lg">{categoryIcon(cat)} {cat}</h2>
               <span className="text-xs text-muted-foreground tabular-nums">{items.length} item{items.length === 1 ? "" : "s"}</span>
             </div>
             <ul className="divide-y divide-surface-2">
