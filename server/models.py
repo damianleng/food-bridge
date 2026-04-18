@@ -19,7 +19,7 @@ class Base(DeclarativeBase):
 class FoodCategory(Base):
     __tablename__ = "food_category"
     id = Column(Integer, primary_key=True)
-    code = Column(String(10))
+    code = Column(Text)
     description = Column(Text)
 
 
@@ -33,7 +33,7 @@ class Nutrient(Base):
     __tablename__ = "nutrient"
     id = Column(Integer, primary_key=True)
     name = Column(Text)
-    unit_name = Column(String(20))
+    unit_name = Column(Text)
     nutrient_nbr = Column(Numeric)
     rank = Column(Numeric)
 
@@ -41,14 +41,14 @@ class Nutrient(Base):
 class FoodNutrientDerivation(Base):
     __tablename__ = "food_nutrient_derivation"
     id = Column(Integer, primary_key=True)
-    code = Column(String(10))
+    code = Column(Text)
     description = Column(Text)
 
 
 class FoodNutrientSource(Base):
     __tablename__ = "food_nutrient_source"
     id = Column(Integer, primary_key=True)
-    code = Column(String(10))
+    code = Column(Text)
     description = Column(Text)
 
 
@@ -62,14 +62,14 @@ class FoodAttributeType(Base):
 class MeasureUnit(Base):
     __tablename__ = "measure_unit"
     id = Column(Integer, primary_key=True)
-    name = Column(String(50))
+    name = Column(Text)
 
 
 class LabMethod(Base):
     __tablename__ = "lab_method"
     id = Column(Integer, primary_key=True)
     description = Column(Text)
-    technique = Column(String(50))
+    technique = Column(Text)
 
 
 class RetentionFactor(Base):
@@ -82,7 +82,7 @@ class RetentionFactor(Base):
 
 class FnddsDerivation(Base):
     __tablename__ = "fndds_derivation"
-    derivation_code = Column(String(10), primary_key=True)
+    derivation_code = Column(Text, primary_key=True)
     derivation_description = Column(Text)
 
 
@@ -91,7 +91,7 @@ class FnddsDerivation(Base):
 class Food(Base):
     __tablename__ = "food"
     fdc_id = Column(Integer, primary_key=True)
-    data_type = Column(String(50))
+    data_type = Column(Text)
     description = Column(Text)
     food_category_id = Column(Text)   # text label in branded exports
     publication_date = Column(Date)
@@ -105,14 +105,14 @@ class BrandedFood(Base):
     brand_owner = Column(Text)
     brand_name = Column(Text)
     subbrand_name = Column(Text)
-    gtin_upc = Column(String(20))
+    gtin_upc = Column(Text)
     ingredients = Column(Text)
     not_a_significant_source_of = Column(Text)
     serving_size = Column(Numeric)
-    serving_size_unit = Column(String(20))
+    serving_size_unit = Column(Text)
     household_serving_fulltext = Column(Text)
     branded_food_category = Column(Text)
-    data_source = Column(String(20))
+    data_source = Column(Text)
     package_weight = Column(Text)
     modified_date = Column(Date)
     available_date = Column(Date)
@@ -172,7 +172,7 @@ class FoodComponent(Base):
     fdc_id = Column(Integer)
     name = Column(Text)
     pct_weight = Column(Numeric)
-    is_refuse = Column(String(1))
+    is_refuse = Column(Text)
     gram_weight = Column(Numeric)
     data_points = Column(Integer)
     min_year_acquired = Column(Integer)
@@ -208,7 +208,7 @@ class FoodUpdateLogEntry(Base):
 class SurveyFnddsFood(Base):
     __tablename__ = "survey_fndds_food"
     fdc_id = Column(Integer, primary_key=True)
-    food_code = Column(String(20))
+    food_code = Column(Text)
     wweia_category_code = Column(Integer)
     start_date = Column(Date)
     end_date = Column(Date)
@@ -223,8 +223,8 @@ class InputFood(Base):
     amount = Column(Numeric)
     sr_code = Column(Integer)
     sr_description = Column(Text)
-    unit = Column(String(20))
-    portion_code = Column(String(20))
+    unit = Column(Text)
+    portion_code = Column(Text)
     portion_description = Column(Text)
     gram_weight = Column(Numeric)
     retention_code = Column(Integer)
@@ -240,7 +240,7 @@ class FnddsIngredientNutrientValue(Base):
     nutrient_value = Column(Numeric)
     nutrient_value_source = Column(Text)
     fdc_id = Column(Integer)
-    derivation_code = Column(String(10))
+    derivation_code = Column(Text)
     sr_addmod_year = Column(Integer)
     foundation_year_acquired = Column(Integer)
     end_date = Column(Date)
@@ -289,7 +289,7 @@ class MarketAcquisition(Base):
     sell_by_date = Column(Date)
     store_city = Column(Text)
     store_name = Column(Text)
-    store_state = Column(String(5))
+    store_state = Column(Text)
     upc_code = Column(Text)
     acquisition_number = Column(Text)
 
@@ -300,13 +300,14 @@ class AgriculturalSamples(Base):
     acquisition_date = Column(Date)
     market_class = Column(Text)
     treatment = Column(Text)
-    state = Column(String(5))
+    state = Column(Text)
 
 
 class LabMethodCode(Base):
     __tablename__ = "lab_method_code"
+    __table_args__ = {"extend_existing": True}
     lab_method_id = Column(Integer, primary_key=True)
-    code = Column(String(20), primary_key=True)
+    code = Column(Text, primary_key=True, nullable=True)
 
 
 class LabMethodNutrient(Base):
@@ -331,7 +332,7 @@ class Microbe(Base):
     microbe_code = Column(Text)
     min_value = Column(Numeric)
     max_value = Column(Numeric)
-    uom = Column(String(20))
+    uom = Column(Text)
 
 
 # ── User Tables ───────────────────────────────────────────────────────────────
@@ -342,10 +343,10 @@ class UserProfile(Base):
     height_cm = Column(Numeric)
     weight_kg = Column(Numeric)
     age = Column(Integer)
-    sex = Column(String(10))
-    activity_level = Column(String(30))
-    smoking_status = Column(String(20))
-    pregnancy_status = Column(String(20))
+    sex = Column(Text)
+    activity_level = Column(Text)
+    smoking_status = Column(Text)
+    pregnancy_status = Column(Text)
     household_size_adults = Column(Integer)
     household_size_children = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -381,7 +382,7 @@ class UserMedication(Base):
     __tablename__ = "user_medication"
     id = Column(Integer, primary_key=True, autoincrement=True)
     profile_id = Column(UUID(as_uuid=True), ForeignKey("user_profile.profile_id", ondelete="CASCADE"), nullable=False)
-    rxcui = Column(String(20))
+    rxcui = Column(Text)
     medication_name = Column(Text)
     drug_class = Column(Text)
     profile = relationship("UserProfile", back_populates="medications")
@@ -392,8 +393,8 @@ class UserGroceryPreference(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     profile_id = Column(UUID(as_uuid=True), ForeignKey("user_profile.profile_id", ondelete="CASCADE"), nullable=False, unique=True)
     weekly_budget_usd = Column(Numeric(10, 2))
-    zip_code = Column(String(10))
-    wic_filter_active = Column(String(1))  # Y/N, derived from profile
+    zip_code = Column(Text)
+    wic_filter_active = Column(Text)  # Y/N, derived from profile
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     profile = relationship("UserProfile", back_populates="grocery_preference")

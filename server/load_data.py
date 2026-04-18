@@ -38,7 +38,7 @@ DDL = """
 -- Reference / Lookup tables
 CREATE TABLE IF NOT EXISTS food_category (
     id          INTEGER PRIMARY KEY,
-    code        VARCHAR(10),
+    code        TEXT,
     description TEXT
 );
 
@@ -50,20 +50,20 @@ CREATE TABLE IF NOT EXISTS wweia_food_category (
 CREATE TABLE IF NOT EXISTS nutrient (
     id           INTEGER PRIMARY KEY,
     name         TEXT,
-    unit_name    VARCHAR(20),
+    unit_name    TEXT,
     nutrient_nbr NUMERIC,
     rank         NUMERIC
 );
 
 CREATE TABLE IF NOT EXISTS food_nutrient_derivation (
     id          INTEGER PRIMARY KEY,
-    code        VARCHAR(10),
+    code        TEXT,
     description TEXT
 );
 
 CREATE TABLE IF NOT EXISTS food_nutrient_source (
     id          INTEGER PRIMARY KEY,
-    code        VARCHAR(10),
+    code        TEXT,
     description TEXT
 );
 
@@ -75,13 +75,13 @@ CREATE TABLE IF NOT EXISTS food_attribute_type (
 
 CREATE TABLE IF NOT EXISTS measure_unit (
     id   INTEGER PRIMARY KEY,
-    name VARCHAR(50)
+    name TEXT
 );
 
 CREATE TABLE IF NOT EXISTS lab_method (
     id          INTEGER PRIMARY KEY,
     description TEXT,
-    technique   VARCHAR(50)
+    technique   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS retention_factor (
@@ -92,14 +92,14 @@ CREATE TABLE IF NOT EXISTS retention_factor (
 );
 
 CREATE TABLE IF NOT EXISTS fndds_derivation (
-    derivation_code        VARCHAR(10) PRIMARY KEY,
+    derivation_code        TEXT PRIMARY KEY,
     derivation_description TEXT
 );
 
 -- Core food table
 CREATE TABLE IF NOT EXISTS food (
     fdc_id           INTEGER PRIMARY KEY,
-    data_type        VARCHAR(50),
+    data_type        TEXT,
     description      TEXT,
     food_category_id TEXT,
     publication_date DATE
@@ -111,14 +111,14 @@ CREATE TABLE IF NOT EXISTS branded_food (
     brand_owner                TEXT,
     brand_name                 TEXT,
     subbrand_name              TEXT,
-    gtin_upc                   VARCHAR(20),
+    gtin_upc                   TEXT,
     ingredients                TEXT,
     not_a_significant_source_of TEXT,
     serving_size               NUMERIC,
-    serving_size_unit          VARCHAR(20),
+    serving_size_unit          TEXT,
     household_serving_fulltext TEXT,
     branded_food_category      TEXT,
-    data_source                VARCHAR(20),
+    data_source                TEXT,
     package_weight             TEXT,
     modified_date              DATE,
     available_date             DATE,
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS food_component (
     fdc_id            INTEGER,
     name              TEXT,
     pct_weight        NUMERIC,
-    is_refuse         CHAR(1),
+    is_refuse         TEXT,
     gram_weight       NUMERIC,
     data_points       INTEGER,
     min_year_acquired INTEGER
@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS food_update_log_entry (
 
 CREATE TABLE IF NOT EXISTS survey_fndds_food (
     fdc_id              INTEGER PRIMARY KEY,
-    food_code           VARCHAR(20),
+    food_code           TEXT,
     wweia_category_code INTEGER,
     start_date          DATE,
     end_date            DATE
@@ -219,8 +219,8 @@ CREATE TABLE IF NOT EXISTS input_food (
     amount               NUMERIC,
     sr_code              INTEGER,
     sr_description       TEXT,
-    unit                 VARCHAR(20),
-    portion_code         VARCHAR(20),
+    unit                 TEXT,
+    portion_code         TEXT,
     portion_description  TEXT,
     gram_weight          NUMERIC,
     retention_code       INTEGER
@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS fndds_ingredient_nutrient_value (
     nutrient_value         NUMERIC,
     nutrient_value_source  TEXT,
     fdc_id                 INTEGER,
-    derivation_code        VARCHAR(10),
+    derivation_code        TEXT,
     sr_addmod_year         INTEGER,
     foundation_year_acquired INTEGER,
     start_date             DATE,
@@ -279,7 +279,7 @@ CREATE TABLE IF NOT EXISTS market_acquisition (
     sell_by_date      DATE,
     store_city        TEXT,
     store_name        TEXT,
-    store_state       VARCHAR(5),
+    store_state       TEXT,
     upc_code          TEXT,
     acquisition_number TEXT
 );
@@ -289,13 +289,12 @@ CREATE TABLE IF NOT EXISTS agricultural_samples (
     acquisition_date DATE,
     market_class     TEXT,
     treatment        TEXT,
-    state            VARCHAR(5)
+    state            TEXT
 );
 
 CREATE TABLE IF NOT EXISTS lab_method_code (
     lab_method_id INTEGER,
-    code          VARCHAR(20),
-    PRIMARY KEY (lab_method_id, code)
+    code          TEXT
 );
 
 CREATE TABLE IF NOT EXISTS lab_method_nutrient (
@@ -318,7 +317,7 @@ CREATE TABLE IF NOT EXISTS microbe (
     microbe_code TEXT,
     min_value   NUMERIC,
     max_value   NUMERIC,
-    uom         VARCHAR(20)
+    uom         TEXT
 );
 
 -- User tables (populated by the application, not CSV)
@@ -327,10 +326,10 @@ CREATE TABLE IF NOT EXISTS user_profile (
     height_cm              NUMERIC,
     weight_kg              NUMERIC,
     age                    INTEGER,
-    sex                    VARCHAR(10),
-    activity_level         VARCHAR(30),
-    smoking_status         VARCHAR(20),
-    pregnancy_status       VARCHAR(20),
+    sex                    TEXT,
+    activity_level         TEXT,
+    smoking_status         TEXT,
+    pregnancy_status       TEXT,
     household_size_adults  INTEGER,
     household_size_children INTEGER,
     created_at             TIMESTAMPTZ DEFAULT NOW(),
@@ -352,7 +351,7 @@ CREATE TABLE IF NOT EXISTS user_health_condition (
 CREATE TABLE IF NOT EXISTS user_medication (
     id              SERIAL PRIMARY KEY,
     profile_id      UUID NOT NULL REFERENCES user_profile(profile_id) ON DELETE CASCADE,
-    rxcui           VARCHAR(20),
+    rxcui           TEXT,
     medication_name TEXT,
     drug_class      TEXT
 );
@@ -361,7 +360,7 @@ CREATE TABLE IF NOT EXISTS user_grocery_preference (
     id                 SERIAL PRIMARY KEY,
     profile_id         UUID NOT NULL UNIQUE REFERENCES user_profile(profile_id) ON DELETE CASCADE,
     weekly_budget_usd  NUMERIC(10, 2),
-    zip_code           VARCHAR(10),
+    zip_code           TEXT,
     wic_filter_active  CHAR(1),
     created_at         TIMESTAMPTZ DEFAULT NOW(),
     updated_at         TIMESTAMPTZ DEFAULT NOW()
@@ -541,7 +540,7 @@ def load_table(conn, table: str, csv_path: Path, columns: list[str]) -> int:
     col_list = ", ".join(columns)
     sql = (
         f"COPY {table} ({col_list}) "
-        f"FROM STDIN WITH (FORMAT CSV, HEADER TRUE, NULL '')"
+        f"FROM STDIN WITH (FORMAT CSV, HEADER TRUE, NULL '', FORCE_NULL ({col_list}))"
     )
     t0 = time.monotonic()
     with open(csv_path, "r", encoding="utf-8-sig") as fh:
