@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export type Sex = "Male" | "Female";
 export type Activity = "Sedentary" | "Lightly Active" | "Moderately Active" | "Very Active" | "Extra Active";
@@ -41,6 +42,12 @@ interface AppState {
   screen: Screen;
   setScreen: (s: Screen) => void;
 
+  onboardingStep: number;
+  setOnboardingStep: (s: number) => void;
+
+  profileId: string;
+  setProfileId: (id: string) => void;
+
   profile: Profile;
   setProfile: (p: Partial<Profile>) => void;
 
@@ -50,12 +57,9 @@ interface AppState {
   selectedFoods: FoodItem[];
   setSelectedFoods: (f: FoodItem[]) => void;
 
-  // raw assistant text per step
-  profileResponse: string;
-  preferencesResponse: string;
   mealPlanResponse: string;
   groceryResponse: string;
-  setResponse: (key: "profile" | "preferences" | "mealPlan" | "grocery", text: string) => void;
+  setResponse: (key: "mealPlan" | "grocery", text: string) => void;
 
   reset: () => void;
 }
@@ -70,41 +74,54 @@ const emptyPrefs: Preferences = {
   budget: "", zip: "", diet: [], allergies: [], cuisines: [], wic: false,
 };
 
-export const useApp = create<AppState>((set) => ({
-  screen: 1,
-  setScreen: (s) => set({ screen: s }),
+export const useApp = create<AppState>()(
+  persist(
+    (set) => ({
+      screen: 1,
+      setScreen: (s) => set({ screen: s }),
 
-  profile: emptyProfile,
-  setProfile: (p) => set((st) => ({ profile: { ...st.profile, ...p } })),
+      onboardingStep: 1,
+      setOnboardingStep: (s) => set({ onboardingStep: s }),
 
-  preferences: emptyPrefs,
-  setPreferences: (p) => set((st) => ({ preferences: { ...st.preferences, ...p } })),
+      profileId: "",
+      setProfileId: (id) => set({ profileId: id }),
 
-  selectedFoods: [],
-  setSelectedFoods: (f) => set({ selectedFoods: f }),
+      profile: emptyProfile,
+      setProfile: (p) => set((st) => ({ profile: { ...st.profile, ...p } })),
 
-  profileResponse: "",
-  preferencesResponse: "",
-  mealPlanResponse: "",
-  groceryResponse: "",
-  setResponse: (key, text) => set(() => {
-    const map = {
-      profile: "profileResponse",
-      preferences: "preferencesResponse",
-      mealPlan: "mealPlanResponse",
-      grocery: "groceryResponse",
-    } as const;
-    return { [map[key]]: text } as Partial<AppState>;
-  }),
+      preferences: emptyPrefs,
+      setPreferences: (p) => set((st) => ({ preferences: { ...st.preferences, ...p } })),
 
-  reset: () => set({
-    screen: 1,
-    profile: emptyProfile,
-    preferences: emptyPrefs,
-    selectedFoods: [],
-    profileResponse: "",
-    preferencesResponse: "",
-    mealPlanResponse: "",
-    groceryResponse: "",
-  }),
-}));
+      selectedFoods: [],
+      setSelectedFoods: (f) => set({ selectedFoods: f }),
+
+      mealPlanResponse: "",
+      groceryResponse: "",
+      setResponse: (key, text) => set(() => {
+        const map = { mealPlan: "mealPlanResponse", grocery: "groceryResponse" } as const;
+        return { [map[key]]: text } as Partial<AppState>;
+      }),
+
+      reset: () => set({
+        screen: 1,
+        onboardingStep: 1,
+        profileId: "",
+        profile: emptyProfile,
+        preferences: emptyPrefs,
+        selectedFoods: [],
+        mealPlanResponse: "",
+        groceryResponse: "",
+      }),
+    }),
+    {
+      name: "foodbridge-state",
+      partialize: (s) => ({
+        screen: s.screen,
+        onboardingStep: s.onboardingStep,
+        profileId: s.profileId,
+        profile: s.profile,
+        preferences: s.preferences,
+      }),
+    },
+  ),
+);

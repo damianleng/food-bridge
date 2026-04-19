@@ -83,7 +83,7 @@ const categoryIcon = (cat: string) =>
   CATEGORY_ICONS[cat] ?? Object.entries(CATEGORY_ICONS).find(([k]) => cat.toLowerCase().includes(k.toLowerCase()))?.[1] ?? "🛒";
 
 const GroceryList = () => {
-  const { groceryResponse, preferences, reset } = useApp();
+  const { groceryResponse, preferences, setScreen, reset } = useApp();
   const [resetting, setResetting] = useState(false);
 
   const parsed = useMemo(() => parseGrocery(groceryResponse), [groceryResponse]);
@@ -175,8 +175,9 @@ const GroceryList = () => {
       </main>
 
       <footer className="fixed bottom-0 left-0 right-0 bg-background border-t border-foreground">
-        <div className="max-w-xl mx-auto px-5 py-4">
-          <button onClick={startOver} className="fb-btn w-full">Start Over</button>
+        <div className="max-w-xl mx-auto px-5 py-4 flex items-center gap-3">
+          <button type="button" onClick={() => setScreen(4)} className="fb-btn-outline">Back</button>
+          <button onClick={startOver} className="fb-btn flex-1">Start Over</button>
         </div>
       </footer>
     </div>

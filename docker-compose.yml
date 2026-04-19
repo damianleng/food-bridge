@@ -26,7 +26,7 @@ services:
       - .env
     environment:
       POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5433
+      POSTGRES_PORT: 5432
     depends_on:
       postgres:
         condition: service_healthy

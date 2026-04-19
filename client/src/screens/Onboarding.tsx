@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp, type Sex, type Activity, type Smoking } from "@/store/app";
-import { chat } from "@/lib/api";
+import { createProfile } from "@/lib/api";
 import ProgressBar from "@/components/ProgressBar";
 import PillGroup from "@/components/PillGroup";
 import Stepper from "@/components/Stepper";
@@ -45,8 +45,7 @@ const isValidHeight = (v: string) => isValidFloat(v) && parseFloat(v) >= 50 && p
 const isValidWeight = (v: string) => isValidFloat(v) && parseFloat(v) >= 10 && parseFloat(v) <= 500;
 
 const Onboarding = () => {
-  const { profile, setProfile, setScreen, setResponse } = useApp();
-  const [step, setStep] = useState(1);
+  const { profile, setProfile, setScreen, setProfileId, onboardingStep: step, setOnboardingStep: setStep } = useApp();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -55,9 +54,9 @@ const Onboarding = () => {
     const errs = validateStep(step);
     if (Object.keys(errs).length) { setFieldErrors(errs); return; }
     setFieldErrors({});
-    setStep((s) => Math.min(STEPS, s + 1));
+    setStep(Math.min(STEPS, step + 1));
   };
-  const back = () => { setFieldErrors({}); setStep((s) => Math.max(1, s - 1)); };
+  const back = () => { setFieldErrors({}); setStep(Math.max(1, step - 1)); };
 
   const validateStep = (s: number): Record<string, string> => {
     const errs: Record<string, string> = {};
@@ -104,9 +103,20 @@ const Onboarding = () => {
     setError(null);
     setLoading(true);
     try {
-      const msg = `I want to set up my profile. Here are my details: height ${profile.height}cm, weight ${profile.weight}kg, age ${profile.age}, sex ${profile.sex}, activity level ${profile.activity}, health goals ${profile.goals.join(", ") || "none"}, health conditions ${profile.conditions.join(", ") || "none"}, smoking status ${profile.smoking}, medications ${profile.medications.join(", ") || "none"}, household size ${profile.adults} adults and ${profile.children} children.`;
-      const res = await chat(msg);
-      setResponse("profile", res.response);
+      const result = await createProfile({
+        height_cm: parseFloat(profile.height),
+        weight_kg: parseFloat(profile.weight),
+        age: parseInt(profile.age),
+        sex: profile.sex,
+        activity_level: profile.activity,
+        smoking_status: profile.smoking,
+        household_size_adults: profile.adults,
+        household_size_children: profile.children,
+        health_goals: profile.goals.filter((g) => g !== "None"),
+        health_conditions: profile.conditions.filter((c) => c !== "None"),
+        medications: profile.medications,
+      });
+      setProfileId(result.profile_id);
       setScreen(2);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -116,7 +126,7 @@ const Onboarding = () => {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><Spinner message="Setting up your profile..." /></div>;
+    return <div className="min-h-screen flex items-center justify-center"><Spinner message="Saving your profile..." /></div>;
   }
 
   const canContinue = (() => {
