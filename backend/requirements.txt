@@ -3,8 +3,8 @@ uvicorn
 python-dotenv
 psycopg2-binary
 sqlalchemy
-httpx
 langchain-core
 langchain-anthropic
 langchain-community
 langgraph
+ddgs

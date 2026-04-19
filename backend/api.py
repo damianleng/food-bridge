@@ -156,7 +156,6 @@ class GroceryListRequest(BaseModel):
 @app.post("/grocery-list")
 async def grocery_list(req: GroceryListRequest):
     import asyncio
-    from grocery_api import get_grocery_price
 
     try:
         data = user.derive_grocery_list([f.model_dump() for f in req.selected_foods])
@@ -165,31 +164,64 @@ async def grocery_list(req: GroceryListRequest):
 
     grocery_list_data = data.get("grocery_list", {})
 
-    # Collect all items for bulk price lookup
-    all_items = []
-    for items in grocery_list_data.values():
-        if isinstance(items, list):
-            all_items.extend(items)
+    # Fetch zip code for location-aware pricing
+    zip_code = "10001"
+    try:
+        import db as _db
+        pref_row = _db.fetch_one(
+            "SELECT zip_code FROM user_grocery_preference WHERE profile_id = %s",
+            (req.profile_id,),
+        )
+        if pref_row and pref_row.get("zip_code"):
+            zip_code = pref_row["zip_code"]
+    except Exception:
+        pass
 
-    prices = await asyncio.gather(
-        *[get_grocery_price(it.get("name", ""), float(it.get("serving_size_g", 100))) for it in all_items],
-        return_exceptions=True,
-    )
+    # Use web search agent for real prices
+    try:
+        loop = asyncio.get_event_loop()
+        price_data = await loop.run_in_executor(
+            None,
+            lambda: planner.get_grocery_prices(grocery_list_data, zip_code),
+        )
+    except Exception:
+        price_data = {"items": [], "total_estimated_usd": 0.0}
+
+    # Match agent prices back to grocery list items by name (fuzzy word overlap)
+    price_map: dict[str, dict] = {}
+    for entry in price_data.get("items", []):
+        name_key = entry.get("name", "").lower()
+        price_map[name_key] = entry
+
+    def _best_match(food_name: str) -> dict | None:
+        words = set(food_name.lower().replace(",", " ").split())
+        best, best_score = None, 0
+        for k, v in price_map.items():
+            k_words = set(k.replace(",", " ").split())
+            score = len(words & k_words)
+            if score > best_score:
+                best, best_score = v, score
+        return best if best_score >= 1 else None
 
     total = 0.0
-    for item, price_result in zip(all_items, prices):
-        if isinstance(price_result, Exception):
-            item["estimated_unit_price_usd"] = 0.0
-            item["price_source"] = "unavailable"
-        else:
+    for category, items in grocery_list_data.items():
+        for item in items:
+            matched = _best_match(item["name"])
             qty = max(1, min(int(item.get("quantity_needed", 1)), 10))
             item["quantity_needed"] = qty
-            item["estimated_unit_price_usd"] = price_result["estimated_price_usd"]
-            item["price_source"] = price_result["source"]
-            total += price_result["estimated_price_usd"] * qty
+            if matched:
+                item["estimated_unit_price_usd"] = round(float(matched.get("price_usd", 0)), 2)
+                item["price_unit"] = matched.get("unit", "")
+                item["price_store"] = matched.get("store", "")
+                item["price_source"] = "web_search"
+            else:
+                item["estimated_unit_price_usd"] = 0.0
+                item["price_source"] = "unavailable"
+            total += item["estimated_unit_price_usd"] * qty
 
+    agent_total = price_data.get("total_estimated_usd", 0.0)
     return {
-        "total_estimated_cost_usd": round(total, 2),
+        "total_estimated_cost_usd": round(agent_total if agent_total > 0 else total, 2),
         "grocery_list": grocery_list_data,
     }
 

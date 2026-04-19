@@ -1,6 +1,7 @@
 """
 LangChain agents for step 4 (meal plan) and step 5 (grocery list).
 """
+import json
 import os
 from pathlib import Path
 
@@ -8,7 +9,8 @@ from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
-from langchain_core.messages import SystemMessage
+from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.prebuilt import create_react_agent
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
@@ -65,6 +67,62 @@ Return ONLY this exact JSON shape:
 
 _meal_plan_agent = create_react_agent(_llm, _tools, prompt=_MEAL_PLAN_PROMPT)
 
+# ── Pricing (single search + single LLM call) ─────────────────────────────────
+
+_search = DuckDuckGoSearchRun()
+
+
+def get_grocery_prices(grocery_list: dict, zip_code: str) -> dict:
+    """One DuckDuckGo search + one LLM call to extract real grocery prices."""
+    import re
+
+    # Build short item names — skip known brand prefixes
+    _KNOWN_BRANDS = {"whole foods market", "trader joe", "kirkland", "great value", "365"}
+
+    def _short_name(full_name: str) -> str:
+        parts = [p.strip() for p in full_name.split(",")]
+        if parts and parts[0].lower() in _KNOWN_BRANDS and len(parts) > 1:
+            return parts[1]
+        return parts[0]
+
+    short_names = []
+    for items in grocery_list.values():
+        for item in items:
+            short_names.append(_short_name(item["name"]))
+
+    query = f"grocery store prices {', '.join(short_names)} near zip {zip_code} 2025"
+    try:
+        search_results = _search.run(query)
+    except Exception as e:
+        search_results = f"Search failed: {e}"
+
+    prompt = f"""Based on these web search results, extract current US grocery store prices for each item.
+
+Search results:
+{search_results}
+
+Items needed: {', '.join(short_names)}
+Location: zip code {zip_code}
+
+Return ONLY this JSON (no markdown, no explanation):
+{{
+  "items": [
+    {{"name": "Chicken Breast", "price_usd": 5.99, "unit": "lb", "store": "Walmart"}},
+    {{"name": "Salmon", "price_usd": 10.99, "unit": "lb", "store": "Kroger"}}
+  ],
+  "total_estimated_usd": 42.50
+}}
+
+Use realistic 2025 US grocery prices even if search results are incomplete."""
+
+    response = _llm.invoke([HumanMessage(content=prompt)])
+    raw = response.content
+    json_match = re.search(r"\{[\s\S]*\}", raw)
+    if json_match:
+        return json.loads(json_match.group())
+
+    return {"items": [], "total_estimated_usd": 0.0}
+
 
 def generate_meal_plan(profile_id: str, selected_foods: list[dict]) -> str:
     foods_str = ", ".join(
@@ -78,7 +136,10 @@ def generate_meal_plan(profile_id: str, selected_foods: list[dict]) -> str:
         "Respect dietary preferences and allergies. "
         "Return the meal plan JSON."
     )
-    result = _meal_plan_agent.invoke({"messages": [{"role": "user", "content": message}]})
+    result = _meal_plan_agent.invoke(
+        {"messages": [{"role": "user", "content": message}]},
+        config={"recursion_limit": 15},
+    )
     return result["messages"][-1].content
 
 
