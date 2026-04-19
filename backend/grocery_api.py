@@ -86,7 +86,7 @@ async def search_off(name: str, max_results: int = 5) -> list[dict]:
         "action": "process",
         "json": 1,
         "page_size": max_results,
-        "fields": "code,product_name,categories_tags,serving_size,quantity,stores_tags",
+        "fields": "code,product_name,categories_tags,serving_size,quantity,stores_tags,image_url",
     }
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         resp = await client.get(OFF_SEARCH_URL, params=params)
@@ -104,6 +104,7 @@ async def search_off(name: str, max_results: int = 5) -> list[dict]:
             "categories": p.get("categories_tags", []),
             "serving_size": p.get("serving_size"),
             "quantity": p.get("quantity"),
+            "image_url": p.get("image_url"),
         })
     return products
 
@@ -214,6 +215,7 @@ async def get_grocery_price(
     """
     barcode: str | None = None
     categories: list[str] = []
+    image_url: str | None = None
     price_summary: dict | None = None
 
     # Step 1: Search Open Food Facts for a matching product
@@ -223,6 +225,7 @@ async def get_grocery_price(
             best = products[0]
             barcode = best["barcode"]
             categories = best.get("categories", [])
+            image_url = best.get("image_url")
     except Exception:
         pass
 
@@ -243,6 +246,7 @@ async def get_grocery_price(
         return {
             "food_name": food_name,
             "barcode": barcode,
+            "image_url": image_url,
             "serving_size_g": serving_size_g,
             "estimated_price_usd": estimated_price,
             "price_per_100g_usd": round(price_per_100g, 3),
@@ -256,6 +260,7 @@ async def get_grocery_price(
     return {
         "food_name": food_name,
         "barcode": barcode,
+        "image_url": image_url,
         "serving_size_g": serving_size_g,
         "estimated_price_usd": estimated_price,
         "price_per_100g_usd": price_per_100g,

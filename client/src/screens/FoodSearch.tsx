@@ -1,8 +1,130 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp, type FoodItem } from "@/store/app";
 import { searchFoods, generateMealPlan } from "@/lib/api";
 import Spinner from "@/components/Spinner";
 import ErrorAlert from "@/components/ErrorAlert";
+
+const MP_STEPS = [
+  { icon: "🥗", text: "Analyzing your food selections…"   },
+  { icon: "📊", text: "Calculating nutrient coverage…"     },
+  { icon: "🧬", text: "Matching your health profile…"      },
+  { icon: "📅", text: "Designing your 7-day plan…"         },
+  { icon: "⚖️",  text: "Balancing meals & variety…"        },
+  { icon: "✨",  text: "Putting the finishing touches…"    },
+];
+const FLOAT_ICONS = [
+  { emoji: "🥦", top: "8%",  left: "7%",  dur: 6.2, delay: 0    },
+  { emoji: "🍎", top: "15%", left: "82%", dur: 7.5, delay: -2.1 },
+  { emoji: "🐟", top: "72%", left: "12%", dur: 5.8, delay: -1.3 },
+  { emoji: "🥚", top: "78%", left: "78%", dur: 6.9, delay: -3.4 },
+  { emoji: "🫐", top: "42%", left: "91%", dur: 7.1, delay: -0.8 },
+  { emoji: "🥕", top: "55%", left: "4%",  dur: 6.4, delay: -2.7 },
+  { emoji: "🌽", top: "25%", left: "55%", dur: 8.0, delay: -4.0 },
+  { emoji: "🍇", top: "88%", left: "48%", dur: 5.5, delay: -1.6 },
+];
+const GREEN = "#7ded7d";
+
+function MealPlanLoader() {
+  const [step, setStep] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => setStep(s => (s + 1) % MP_STEPS.length), 2500);
+    return () => clearInterval(t);
+  }, []);
+
+  const { icon, text } = MP_STEPS[step];
+
+  return (
+    <div style={{
+      minHeight: "100vh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      background: "linear-gradient(160deg, hsl(150 60% 97%) 0%, hsl(150 40% 93%) 100%)",
+      position: "relative", overflow: "hidden",
+    }}>
+      {/* Background radial glow */}
+      <div style={{
+        position: "absolute", width: 520, height: 520, borderRadius: "50%",
+        background: `radial-gradient(circle, rgba(125,237,125,0.22) 0%, transparent 68%)`,
+        top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+        pointerEvents: "none",
+      }} />
+
+      {/* Expanding pulse rings */}
+      {[0, 1, 2].map(i => (
+        <div key={i} style={{
+          position: "absolute", width: 104, height: 104, borderRadius: "50%",
+          border: `2px solid ${GREEN}`,
+          animation: `mp-ring-expand 2.7s ease-out ${i * 0.9}s infinite`,
+          pointerEvents: "none",
+        }} />
+      ))}
+
+      {/* Floating background food icons */}
+      {FLOAT_ICONS.map(({ emoji, top, left, dur, delay }, i) => (
+        <div key={i} style={{
+          position: "absolute", fontSize: "1.6rem",
+          top, left,
+          opacity: 0.35,
+          animation: `mp-float ${dur}s ease-in-out ${delay}s infinite`,
+          pointerEvents: "none",
+        }}>
+          {emoji}
+        </div>
+      ))}
+
+      {/* Center bubble */}
+      <div style={{
+        position: "relative", zIndex: 10,
+        width: 90, height: 90, borderRadius: "50%",
+        background: `linear-gradient(135deg, ${GREEN} 0%, #3dc86e 100%)`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "2.3rem",
+        boxShadow: `0 0 0 8px rgba(125,237,125,0.15), 0 0 40px rgba(125,237,125,0.4)`,
+        animation: "mp-float 3s ease-in-out infinite",
+      }}>
+        <span key={step} style={{ animation: "mp-fade-up 0.3s ease-out" }}>{icon}</span>
+      </div>
+
+      {/* Headline */}
+      <h2 style={{
+        marginTop: "2rem", fontSize: "1.5rem", fontWeight: 700,
+        letterSpacing: "-0.02em", color: "hsl(158 60% 18%)",
+        background: `linear-gradient(90deg, hsl(158 60% 25%), ${GREEN}, hsl(158 60% 25%))`,
+        backgroundSize: "200% auto",
+        WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+        animation: "mp-shimmer 3s linear infinite",
+      }}>
+        Building your meal plan
+      </h2>
+
+      {/* Cycling step label */}
+      <p key={step} style={{
+        marginTop: "0.6rem", fontSize: "0.9rem",
+        color: "hsl(158 20% 38%)", animation: "mp-fade-up 0.3s ease-out",
+        minHeight: "1.3rem",
+      }}>
+        {text}
+      </p>
+
+      {/* Progress dots */}
+      <div style={{ display: "flex", gap: 7, marginTop: "1.8rem", alignItems: "center" }}>
+        {MP_STEPS.map((_, i) => (
+          <div key={i} style={{
+            height: 6, borderRadius: 3,
+            width: i === step ? 24 : 6,
+            background: i === step ? GREEN : "hsl(150 30% 82%)",
+            transition: "all 0.35s cubic-bezier(0.4,0,0.2,1)",
+            boxShadow: i === step ? `0 0 8px rgba(125,237,125,0.7)` : "none",
+          }} />
+        ))}
+      </div>
+
+      <p style={{ marginTop: "2.5rem", fontSize: "0.75rem", color: "hsl(158 12% 55%)" }}>
+        This usually takes 15–30 seconds
+      </p>
+    </div>
+  );
+}
 
 const DATA_TYPE_LABELS: Record<string, string> = {
   foundation_food:   "Foundation",
@@ -73,9 +195,7 @@ const FoodSearch = () => {
     }
   };
 
-  if (building) {
-    return <div className="min-h-screen flex items-center justify-center"><Spinner message="Optimizing your meal plan..." /></div>;
-  }
+  if (building) return <MealPlanLoader />;
 
   const needed = Math.max(0, 3 - selectedFoods.length);
 

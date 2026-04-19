@@ -10,6 +10,7 @@ interface GroceryItem {
   price?: number;
   source?: "live" | "estimate";
   category?: string;
+  image_url?: string;
 }
 
 interface ParsedGrocery {
@@ -30,6 +31,7 @@ function parseItem(i: Record<string, unknown>, category?: string): GroceryItem {
     price,
     source: src.includes("open") || src.includes("live") ? "live" : src.includes("est") ? "estimate" : undefined,
     category,
+    image_url: (i.image_url as string | undefined) ?? undefined,
   };
 }
 
@@ -151,7 +153,13 @@ const GroceryList = () => {
             </div>
             <ul className="divide-y divide-surface-2">
               {items.map((it, i) => (
-                <li key={i} className="py-3 flex items-start justify-between gap-4">
+                <li key={i} className="py-3 flex items-start gap-3">
+                  <div className="w-14 h-14 shrink-0 bg-surface-2 overflow-hidden flex items-center justify-center text-2xl">
+                    {it.image_url
+                      ? <img src={it.image_url} alt={it.name} className="w-full h-full object-cover" />
+                      : categoryIcon(it.category ?? "Other")
+                    }
+                  </div>
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-sm">{it.name}</p>
                     {it.brand && <p className="text-xs text-muted-foreground">{it.brand}</p>}
@@ -165,7 +173,7 @@ const GroceryList = () => {
                     </div>
                   </div>
                   {typeof it.price === "number" && (
-                    <span className="text-sm font-semibold tabular-nums shrink-0">${it.price.toFixed(2)}</span>
+                    <span className="text-sm font-semibold tabular-nums shrink-0 pt-0.5">${it.price.toFixed(2)}</span>
                   )}
                 </li>
               ))}

@@ -1,3 +1,4 @@
+import React from "react";
 import { useApp } from "@/store/app";
 import Onboarding from "@/screens/Onboarding";
 import Preferences from "@/screens/Preferences";
@@ -26,19 +27,19 @@ export default function Home() {
           </div>
 
           {/* Step indicator */}
-          <div className="flex items-center mt-4 gap-0">
+          <div className="flex items-center mt-4">
             {SCREEN_LABELS.map((label, i) => {
               const num = i + 1;
               const active = screen === num;
               const done = screen > num;
               return (
-                <div key={label} className="flex items-center flex-1 min-w-0">
-                  <div className="flex flex-col items-center gap-1 flex-1">
+                <React.Fragment key={label}>
+                  <div className="flex flex-col items-center gap-1">
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
                       ${done ? "bg-white text-emerald-700 border-white"
                         : active ? "bg-amber-400 text-white border-amber-300 scale-110 shadow-lg"
                         : "bg-white/20 text-white/60 border-white/30"}`}>
-                      {done ? "✓" : num}
+                      <span className="leading-none">{done ? "✓" : num}</span>
                     </div>
                     <span className={`text-[10px] font-medium text-center leading-tight hidden sm:block
                       ${active ? "text-amber-300" : "text-emerald-200"}`}>
@@ -46,9 +47,9 @@ export default function Home() {
                     </span>
                   </div>
                   {i < SCREEN_LABELS.length - 1 && (
-                    <div className={`h-0.5 flex-1 mx-1 mb-4 transition-all ${done ? "bg-white" : "bg-white/25"}`} />
+                    <div className={`flex-1 h-0.5 mb-4 mx-1 transition-all ${done ? "bg-white" : "bg-white/25"}`} />
                   )}
-                </div>
+                </React.Fragment>
               );
             })}
           </div>

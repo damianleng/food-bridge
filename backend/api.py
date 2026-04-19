@@ -151,6 +151,7 @@ def meal_plan(req: MealPlanRequest):
 class GroceryListRequest(BaseModel):
     profile_id: str
     selected_foods: list[SelectedFood]
+    meal_plan_text: str | None = None
 
 
 @app.post("/grocery-list")
@@ -159,7 +160,11 @@ async def grocery_list(req: GroceryListRequest):
     from grocery_api import get_grocery_price
 
     try:
-        data = user.derive_grocery_list([f.model_dump() for f in req.selected_foods])
+        if req.meal_plan_text:
+            foods = user.extract_ingredients_from_meal_plan(req.meal_plan_text)
+        else:
+            foods = [f.model_dump() for f in req.selected_foods]
+        data = user.derive_grocery_list(foods)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -186,6 +191,7 @@ async def grocery_list(req: GroceryListRequest):
             item["quantity_needed"] = qty
             item["estimated_unit_price_usd"] = price_result["estimated_price_usd"]
             item["price_source"] = price_result["source"]
+            item["image_url"] = price_result.get("image_url")
             total += price_result["estimated_price_usd"] * qty
 
     return {

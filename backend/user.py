@@ -5,6 +5,54 @@ Direct DB operations for steps 1 & 2 — no Claude / MCP involved.
 from db import execute, execute_returning, fetch_all, fetch_one
 from nutrition import UserProfile, calculate_personalized_dv as _calc_dv, NUTRIENT_ID_MAP, NUTRIENT_WEIGHTS, score_food, _RDI_BASE
 
+# Keyword-based dietary preference filter rules.
+# bad_categories / bad_ingredients match against branded_food_category and
+# the food description (case-insensitive).
+DIETARY_FILTER_RULES: dict[str, dict] = {
+    "vegetarian": {
+        "bad_keywords": ["beef", "pork", "chicken", "turkey", "lamb", "duck", "veal",
+                         "bison", "venison", "fish", "tuna", "salmon", "shrimp", "lobster",
+                         "crab", "scallop", "clam", "oyster", "anchovy", "sardine",
+                         "gelatin", "lard", "tallow", "pepperoni", "salami", "bacon",
+                         "prosciutto", "chorizo", "meat"],
+    },
+    "vegan": {
+        "bad_keywords": ["beef", "pork", "chicken", "turkey", "lamb", "duck", "veal",
+                         "bison", "venison", "fish", "tuna", "salmon", "shrimp", "lobster",
+                         "crab", "scallop", "clam", "oyster", "anchovy", "sardine",
+                         "gelatin", "lard", "tallow", "pepperoni", "salami", "bacon",
+                         "prosciutto", "chorizo", "meat",
+                         "milk", "cheese", "butter", "cream", "whey", "casein",
+                         "lactose", "yogurt", "ghee", "kefir", "egg", "honey",
+                         "albumin", "collagen"],
+    },
+    "gluten_free": {
+        "bad_keywords": ["wheat", "barley", "rye", "malt", "triticale", "spelt",
+                         "kamut", "farro", "semolina", "durum", "bulgur", "couscous",
+                         "breadcrumb", "crouton", "flour"],
+    },
+    "dairy_free": {
+        "bad_keywords": ["milk", "cheese", "butter", "cream", "whey", "casein",
+                         "lactose", "yogurt", "ghee", "kefir", "curds"],
+    },
+    "nut_free": {
+        "bad_keywords": ["peanut", "almond", "cashew", "walnut", "pecan", "hazelnut",
+                         "pistachio", "macadamia", "brazil nut", "pine nut", "chestnut"],
+    },
+    "halal": {
+        "bad_keywords": ["pork", "lard", "gelatin", "alcohol", "wine", "beer"],
+    },
+    "kosher": {
+        "bad_keywords": ["pork", "shellfish", "shrimp", "lobster", "crab", "lard"],
+    },
+    "low_carb": {},   # handled via nutrient cap — no keyword exclusions
+    "keto": {
+        "bad_keywords": ["sugar", "corn syrup", "honey", "maple syrup",
+                         "starch", "dextrose", "maltodextrin"],
+    },
+    "low_sodium": {},  # handled via nutrient cap
+}
+
 
 def _snake(s: str) -> str:
     return s.strip().lower().replace(" ", "_")
@@ -223,6 +271,58 @@ _DEFAULT_QTY: dict[str, int] = {
 }
 
 
+def extract_ingredients_from_meal_plan(meal_plan_text: str) -> list[dict]:
+    """Parse a meal plan JSON string and return DB-matched ingredients for the grocery list."""
+    import re, json
+
+    raw_ingredients: list[str] = []
+
+    try:
+        json_match = re.search(r'\{[\s\S]*\}', meal_plan_text)
+        if json_match:
+            obj = json.loads(json_match.group())
+            for day in obj.get("days", []):
+                for meal in day.get("meals", []):
+                    name = meal.get("name", "")
+                    # Strip meal-type prefix
+                    name = re.sub(r'^(breakfast|lunch|dinner|snack)\s*[:–\-]\s*', '', name, flags=re.I)
+                    # Split on common separators: +, &, "with", "and", ","
+                    parts = re.split(r'\s*[+&,]\s*|\s+with\s+|\s+and\s+', name, flags=re.I)
+                    for part in parts:
+                        part = part.strip()
+                        if len(part) > 2:
+                            raw_ingredients.append(part)
+    except Exception:
+        pass
+
+    # Deduplicate case-insensitively
+    seen_keys: set[str] = set()
+    unique: list[str] = []
+    for ing in raw_ingredients:
+        key = ing.lower()
+        if key not in seen_keys:
+            seen_keys.add(key)
+            unique.append(ing)
+
+    # Look up each ingredient in the USDA food DB; fall back to name-only if no match
+    results: list[dict] = []
+    seen_ids: set[int] = set()
+    for ing in unique:
+        rows = fetch_all(
+            "SELECT fdc_id, description FROM food WHERE description ILIKE %s LIMIT 1",
+            (f"%{ing}%",),
+        )
+        if rows:
+            fid = int(rows[0]["fdc_id"])
+            if fid not in seen_ids:
+                seen_ids.add(fid)
+                results.append({"fdc_id": fid, "name": rows[0]["description"]})
+        else:
+            results.append({"fdc_id": 0, "name": ing})
+
+    return results
+
+
 def _categorise(name: str) -> str:
     lower = name.lower()
     for keywords, category in _CATEGORY_RULES:
@@ -283,6 +383,19 @@ def search_foods(query: str, profile_id: str | None = None, limit: int = 20) -> 
             candidates = [
                 c for c in candidates
                 if not any(a in c["description"].lower() for a in allergens)
+            ]
+
+        dietary_rows = fetch_all(
+            "SELECT preference FROM user_dietary_preference WHERE profile_id = %s", (profile_id,)
+        )
+        bad_keywords: set[str] = set()
+        for row in dietary_rows:
+            rules = DIETARY_FILTER_RULES.get(row["preference"], {})
+            bad_keywords.update(rules.get("bad_keywords", []))
+        if bad_keywords:
+            candidates = [
+                c for c in candidates
+                if not any(kw in c["description"].lower() for kw in bad_keywords)
             ]
 
         cuisine_rows = fetch_all(

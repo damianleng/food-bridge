@@ -1,8 +1,122 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useApp } from "@/store/app";
 import { generateGroceryList } from "@/lib/api";
 import Spinner from "@/components/Spinner";
 import ErrorAlert from "@/components/ErrorAlert";
+
+const GROCERY_STEPS = [
+  { icon: "🛒", text: "Reviewing your meal plan…"         },
+  { icon: "📋", text: "Compiling ingredients…"             },
+  { icon: "⚖️",  text: "Calculating quantities…"           },
+  { icon: "🏪", text: "Organizing by store section…"      },
+  { icon: "💰", text: "Checking against your budget…"     },
+  { icon: "✅", text: "Almost done…"                       },
+];
+const GROCERY_FLOAT_ICONS = [
+  { emoji: "🥬", top: "9%",  left: "8%",  dur: 6.1, delay: 0    },
+  { emoji: "🧅", top: "14%", left: "80%", dur: 7.3, delay: -2.0 },
+  { emoji: "🥩", top: "70%", left: "11%", dur: 5.9, delay: -1.2 },
+  { emoji: "🧀", top: "76%", left: "80%", dur: 7.0, delay: -3.3 },
+  { emoji: "🍞", top: "44%", left: "90%", dur: 7.2, delay: -0.7 },
+  { emoji: "🫙", top: "57%", left: "5%",  dur: 6.3, delay: -2.6 },
+  { emoji: "🥫", top: "22%", left: "53%", dur: 8.1, delay: -4.1 },
+  { emoji: "🧴", top: "86%", left: "46%", dur: 5.6, delay: -1.5 },
+];
+const GREEN = "#7ded7d";
+
+function GroceryLoader() {
+  const [step, setStep] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => setStep(s => (s + 1) % GROCERY_STEPS.length), 2500);
+    return () => clearInterval(t);
+  }, []);
+
+  const { icon, text } = GROCERY_STEPS[step];
+
+  return (
+    <div style={{
+      minHeight: "100vh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      background: "linear-gradient(160deg, hsl(150 60% 97%) 0%, hsl(150 40% 93%) 100%)",
+      position: "relative", overflow: "hidden",
+    }}>
+      <div style={{
+        position: "absolute", width: 520, height: 520, borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(125,237,125,0.22) 0%, transparent 68%)",
+        top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+        pointerEvents: "none",
+      }} />
+
+      {[0, 1, 2].map(i => (
+        <div key={i} style={{
+          position: "absolute", width: 104, height: 104, borderRadius: "50%",
+          border: `2px solid ${GREEN}`,
+          animation: `mp-ring-expand 2.7s ease-out ${i * 0.9}s infinite`,
+          pointerEvents: "none",
+        }} />
+      ))}
+
+      {GROCERY_FLOAT_ICONS.map(({ emoji, top, left, dur, delay }, i) => (
+        <div key={i} style={{
+          position: "absolute", fontSize: "1.6rem",
+          top, left, opacity: 0.35,
+          animation: `mp-float ${dur}s ease-in-out ${delay}s infinite`,
+          pointerEvents: "none",
+        }}>
+          {emoji}
+        </div>
+      ))}
+
+      <div style={{
+        position: "relative", zIndex: 10,
+        width: 90, height: 90, borderRadius: "50%",
+        background: `linear-gradient(135deg, ${GREEN} 0%, #3dc86e 100%)`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "2.3rem",
+        boxShadow: `0 0 0 8px rgba(125,237,125,0.15), 0 0 40px rgba(125,237,125,0.4)`,
+        animation: "mp-float 3s ease-in-out infinite",
+      }}>
+        <span key={step} style={{ animation: "mp-fade-up 0.3s ease-out" }}>{icon}</span>
+      </div>
+
+      <h2 style={{
+        marginTop: "2rem", fontSize: "1.5rem", fontWeight: 700,
+        letterSpacing: "-0.02em",
+        background: `linear-gradient(90deg, hsl(158 60% 25%), ${GREEN}, hsl(158 60% 25%))`,
+        backgroundSize: "200% auto",
+        WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+        animation: "mp-shimmer 3s linear infinite",
+      }}>
+        Building your grocery list
+      </h2>
+
+      <p key={step} style={{
+        marginTop: "0.6rem", fontSize: "0.9rem",
+        color: "hsl(158 20% 38%)", animation: "mp-fade-up 0.3s ease-out",
+        minHeight: "1.3rem",
+      }}>
+        {text}
+      </p>
+
+      <div style={{ display: "flex", gap: 7, marginTop: "1.8rem", alignItems: "center" }}>
+        {GROCERY_STEPS.map((_, i) => (
+          <div key={i} style={{
+            height: 6, borderRadius: 3,
+            width: i === step ? 24 : 6,
+            background: i === step ? GREEN : "hsl(150 30% 82%)",
+            transition: "all 0.35s cubic-bezier(0.4,0,0.2,1)",
+            boxShadow: i === step ? `0 0 8px rgba(125,237,125,0.7)` : "none",
+          }} />
+        ))}
+      </div>
+
+      <p style={{ marginTop: "2.5rem", fontSize: "0.75rem", color: "hsl(158 12% 55%)" }}>
+        This usually takes 15–30 seconds
+      </p>
+    </div>
+  );
+}
 
 interface DayPlan {
   day: string;
@@ -10,7 +124,7 @@ interface DayPlan {
 }
 
 interface ParsedPlan {
-  coverage: { name: string; pct: number }[];
+  coverage: { name: string; key: string; pct: number }[];
   days: DayPlan[];
   swaps: { food: string; reason: string }[];
   rawFallback?: string;
@@ -18,12 +132,40 @@ interface ParsedPlan {
 
 const NUTRIENT_LABELS: Record<string, string> = {
   calories_kcal: "Calories", protein_g: "Protein", fat_g: "Fat",
-  saturated_fat_g: "Sat. Fat", carbohydrates_g: "Carbs", fiber_g: "Fiber",
+  saturated_fat_g: "Sat. Fat", carbohydrates_g: "Carbs", carbs_g: "Carbs", fiber_g: "Fiber",
   added_sugars_g: "Added Sugar", sodium_mg: "Sodium", potassium_mg: "Potassium",
   calcium_mg: "Calcium", iron_mg: "Iron", vitamin_c_mg: "Vitamin C",
   vitamin_d_iu: "Vitamin D", folate_mcg: "Folate", b12_mcg: "Vitamin B12",
   magnesium_mg: "Magnesium", zinc_mg: "Zinc",
 };
+
+// Standard RDI reference values (2000 kcal diet)
+const NUTRIENT_DV: Record<string, number> = {
+  calories_kcal: 2000, protein_g: 50, fat_g: 78, saturated_fat_g: 20,
+  carbohydrates_g: 275, carbs_g: 275, fiber_g: 28, added_sugars_g: 50,
+  sodium_mg: 2300, potassium_mg: 4700, calcium_mg: 1300, iron_mg: 18,
+  vitamin_c_mg: 90, vitamin_d_iu: 800, folate_mcg: 400, b12_mcg: 2.4,
+  magnesium_mg: 420, zinc_mg: 11,
+};
+
+function nutrientUnit(key: string): string {
+  if (key.endsWith("_kcal")) return "kcal";
+  if (key.endsWith("_iu"))   return "IU";
+  if (key.endsWith("_mcg"))  return "mcg";
+  if (key.endsWith("_mg"))   return "mg";
+  return "g";
+}
+
+function nutrientAmount(key: string, pct: number): string {
+  const dv = NUTRIENT_DV[key];
+  if (!dv) return `${Math.round(pct)}%`;
+  const amount = (pct / 100) * dv;
+  const unit = nutrientUnit(key);
+  const formatted = unit === "g" || unit === "kcal"
+    ? Math.round(amount).toString()
+    : amount < 10 ? amount.toFixed(1) : Math.round(amount).toString();
+  return `${formatted}${unit}`;
+}
 
 const MEAL_META = [
   { label: "Breakfast", icon: "🌅", bg: "bg-amber-50" },
@@ -63,8 +205,9 @@ function parseMealPlan(text: string): ParsedPlan {
 
       const cov = (obj.nutrient_coverage ?? obj.coverage ?? obj.nutrients) as Record<string, unknown> | unknown[] | undefined;
       if (cov && typeof cov === "object" && !Array.isArray(cov)) {
-        result.coverage = Object.entries(cov).map(([name, v]) => ({
-          name: NUTRIENT_LABELS[name] ?? name,
+        result.coverage = Object.entries(cov).map(([key, v]) => ({
+          key,
+          name: NUTRIENT_LABELS[key] ?? key,
           pct: typeof v === "number" ? v : Number(String(v).replace(/[^\d.]/g, "")) || 0,
         }));
       }
@@ -124,7 +267,7 @@ const MealPlan = () => {
     setLoading(true);
     try {
       const foods = selectedFoods.map((f) => ({ fdc_id: Number(f.fdc_id), name: f.name }));
-      const result = await generateGroceryList(profileId, foods);
+      const result = await generateGroceryList(profileId, foods, mealPlanResponse);
       setResponse("grocery", result);
       setScreen(5);
     } catch (e) {
@@ -134,9 +277,7 @@ const MealPlan = () => {
     }
   };
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><Spinner message="Building your grocery list..." /></div>;
-  }
+  if (loading) return <GroceryLoader />;
 
   const currentDay = plan.days[activeDay];
 
@@ -199,11 +340,12 @@ const MealPlan = () => {
               {plan.coverage.map((c) => {
                 const pct = Math.min(100, Math.max(0, c.pct));
                 return (
-                  <div key={c.name}>
+                  <div key={c.name} className="cursor-default group">
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-muted-foreground truncate pr-1">{c.name}</span>
                       <span className={`font-bold tabular-nums shrink-0 ${coverageTextColor(c.pct)}`}>
-                        {Math.round(c.pct)}%
+                        <span className="group-hover:hidden">{Math.round(c.pct)}%</span>
+                        <span className="hidden group-hover:inline">{nutrientAmount(c.key, c.pct)}</span>
                       </span>
                     </div>
                     <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">

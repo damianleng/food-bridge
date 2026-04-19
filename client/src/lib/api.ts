@@ -97,10 +97,11 @@ export async function generateMealPlan(
 export async function generateGroceryList(
   profileId: string,
   selectedFoods: { fdc_id: number; name: string }[],
+  mealPlanText?: string,
 ): Promise<string> {
   const res = await post<{ total_estimated_cost_usd: number; grocery_list: unknown }>(
     "/grocery-list",
-    { profile_id: profileId, selected_foods: selectedFoods },
+    { profile_id: profileId, selected_foods: selectedFoods, meal_plan_text: mealPlanText },
   );
   return JSON.stringify(res);
 }
