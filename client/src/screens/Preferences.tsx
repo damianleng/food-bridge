@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp } from "@/store/app";
-import { chat } from "@/lib/api";
+import { savePreferences } from "@/lib/api";
 import PillGroup from "@/components/PillGroup";
 import Spinner from "@/components/Spinner";
 import ErrorAlert from "@/components/ErrorAlert";
@@ -13,7 +13,7 @@ const isValidBudget = (v: string) => /^\d+(\.\d{0,2})?$/.test(v.trim()) && parse
 const isValidZip = (v: string) => /^\d{5}$/.test(v.trim());
 
 const Preferences = () => {
-  const { preferences, setPreferences, setScreen, setResponse } = useApp();
+  const { preferences, setPreferences, setScreen, profileId } = useApp();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -34,9 +34,15 @@ const Preferences = () => {
     setError(null);
     setLoading(true);
     try {
-      const msg = `My preferences: weekly budget $${preferences.budget}, zip code ${preferences.zip}, dietary preferences ${preferences.diet.join(", ") || "none"}, allergies ${preferences.allergies.join(", ") || "none"}, cuisine preferences ${preferences.cuisines.join(", ") || "none"}, WIC eligible: ${preferences.wic ? "yes" : "no"}.`;
-      const res = await chat(msg);
-      setResponse("preferences", res.response);
+      await savePreferences({
+        profile_id: profileId,
+        weekly_budget_usd: parseFloat(preferences.budget),
+        zip_code: preferences.zip,
+        dietary_preferences: preferences.diet,
+        allergies: preferences.allergies,
+        cuisine_preferences: preferences.cuisines,
+        wic_filter_active: preferences.wic,
+      });
       setScreen(3);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -122,8 +128,9 @@ const Preferences = () => {
       </main>
 
       <footer className="fixed bottom-0 left-0 right-0 bg-background border-t border-foreground">
-        <div className="max-w-xl mx-auto px-5 py-4">
-          <button onClick={submit} className="fb-btn w-full">Continue</button>
+        <div className="max-w-xl mx-auto px-5 py-4 flex items-center gap-3">
+          <button type="button" onClick={() => setScreen(1)} className="fb-btn-outline">Back</button>
+          <button onClick={submit} className="fb-btn flex-1">Continue</button>
         </div>
       </footer>
     </div>
