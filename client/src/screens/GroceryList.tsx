@@ -6,7 +6,7 @@ import Spinner from "@/components/Spinner";
 interface GroceryItem {
   name: string;
   brand?: string;
-  quantity?: string;
+  quantity?: number;
   price?: number;
   source?: "live" | "estimate";
   category?: string;
@@ -23,11 +23,12 @@ function parseItem(i: Record<string, unknown>, category?: string): GroceryItem {
   const priceRaw = i.estimated_unit_price_usd ?? i.price ?? i.estimated_price ?? i.cost;
   const price = typeof priceRaw === "number" ? priceRaw : Number(String(priceRaw ?? "").replace(/[^\d.]/g, "")) || 0;
   const src = String(i.price_source ?? i.source ?? "").toLowerCase();
-  const qty = i.quantity_needed ?? i.quantity;
+  const qtyRaw = i.quantity_needed ?? i.quantity;
+  const qty = qtyRaw != null ? Number(qtyRaw) : undefined;
   return {
     name: String(i.description ?? i.name ?? i.food ?? "Item"),
     brand: (i.brand_name ?? i.brand) as string | undefined,
-    quantity: qty != null ? `x${qty}` : undefined,
+    quantity: qty,
     price,
     source: src.includes("open") || src.includes("live") ? "live" : src.includes("est") ? "estimate" : undefined,
     category,
@@ -164,7 +165,11 @@ const GroceryList = () => {
                     <p className="font-semibold text-sm">{it.name}</p>
                     {it.brand && <p className="text-xs text-muted-foreground">{it.brand}</p>}
                     <div className="mt-1 flex items-center gap-2">
-                      {it.quantity && <span className="text-xs text-muted-foreground">{it.quantity}</span>}
+                      {it.quantity != null && typeof it.price === "number" && (
+                        <span className="text-xs text-muted-foreground">
+                          x{it.quantity} × ${it.price.toFixed(2)}
+                        </span>
+                      )}
                       {it.source && (
                         <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 ${it.source === "live" ? "bg-foreground text-background" : "bg-surface-2 text-foreground"}`}>
                           {it.source === "live" ? "live price" : "estimate"}
@@ -173,7 +178,9 @@ const GroceryList = () => {
                     </div>
                   </div>
                   {typeof it.price === "number" && (
-                    <span className="text-sm font-semibold tabular-nums shrink-0 pt-0.5">${it.price.toFixed(2)}</span>
+                    <span className="text-sm font-semibold tabular-nums shrink-0 pt-0.5">
+                      ${((it.quantity ?? 1) * it.price).toFixed(2)}
+                    </span>
                   )}
                 </li>
               ))}
