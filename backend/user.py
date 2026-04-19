@@ -2,7 +2,13 @@
 Direct DB operations for steps 1 & 2 — no Claude / MCP involved.
 """
 
+import asyncio
+
+import pandas as pd
+
 from db import execute, execute_returning, fetch_all, fetch_one
+from grocery_api import get_grocery_prices_bulk
+from ml_ranker import build_feature_row, load_ranker, predict_scores, blend_scores
 from nutrition import UserProfile, calculate_personalized_dv as _calc_dv, NUTRIENT_ID_MAP, NUTRIENT_WEIGHTS, score_food, _RDI_BASE
 
 
@@ -185,6 +191,8 @@ _NUTRIENT_LABELS = {
     "zinc_mg": "Zinc",
 }
 
+_ML_RANKER = load_ranker()
+
 
 # ── Grocery list derivation ───────────────────────────────────────────────────
 
@@ -272,8 +280,10 @@ def search_foods(query: str, profile_id: str | None = None, limit: int = 20) -> 
     if not candidates:
         return []
 
-    # Fetch user's cuisine preferences and allergens in parallel
     cuisine_keywords: list[str] = []
+    health_goals: list[str] = []
+    health_conditions: list[str] = []
+
     if profile_id:
         allergy_rows = fetch_all(
             "SELECT allergen FROM user_allergy WHERE profile_id = %s", (profile_id,)
@@ -292,12 +302,21 @@ def search_foods(query: str, profile_id: str | None = None, limit: int = 20) -> 
             keywords = _CUISINE_KEYWORDS.get(row["cuisine"], [])
             cuisine_keywords.extend(keywords)
 
+        goal_rows = fetch_all(
+            "SELECT goal FROM user_health_goal WHERE profile_id = %s", (profile_id,)
+        )
+        health_goals = [r["goal"] for r in goal_rows]
+
+        condition_rows = fetch_all(
+            "SELECT condition_name FROM user_health_condition WHERE profile_id = %s", (profile_id,)
+        )
+        health_conditions = [r["condition_name"] for r in condition_rows]
+
     if not candidates:
         return []
 
     fdc_ids = [int(r["fdc_id"]) for r in candidates]
 
-    # Fetch key nutrients for all candidates in one query
     nutrient_rows = fetch_all(
         "SELECT fdc_id, nutrient_id, amount FROM food_nutrient WHERE fdc_id = ANY(%s) AND nutrient_id = ANY(%s)",
         (fdc_ids, _NUTRIENT_IDS),
@@ -310,7 +329,6 @@ def search_foods(query: str, profile_id: str | None = None, limit: int = 20) -> 
         if dv_key and row["amount"] is not None:
             nutrient_map.setdefault(fid, {})[dv_key] = float(row["amount"])
 
-    # Load user's personalized DV (fall back to RDI baseline)
     dv: dict[str, float] = dict(_RDI_BASE)
     if profile_id:
         dv_row = fetch_one(
@@ -326,12 +344,28 @@ def search_foods(query: str, profile_id: str | None = None, limit: int = 20) -> 
                 except (TypeError, ValueError):
                     pass
 
+    price_inputs = [{"food_name": c["description"], "serving_size_g": 100.0} for c in candidates]
+    try:
+        price_outputs = asyncio.run(get_grocery_prices_bulk(price_inputs))
+    except RuntimeError:
+        price_outputs = [
+            {
+                "estimated_price_usd": 0.0,
+                "price_per_100g_usd": 0.0,
+                "source": "unavailable",
+            }
+            for _ in candidates
+        ]
+
     results = []
-    for food in candidates:
+    feature_rows = []
+    base_rows = []
+
+    for food, price_data in zip(candidates, price_outputs):
         fid = int(food["fdc_id"])
         nutrients = nutrient_map.get(fid, {})
         raw = score_food(nutrients, dv)
-        scaled = round(min(100.0, max(0.0, raw * 25)), 1)
+        scaled_heuristic = round(min(100.0, max(0.0, raw * 25)), 1)
 
         top = sorted(
             [k for k in nutrients if k in _BENEFICIAL and dv.get(k, 0) > 0],
@@ -339,18 +373,57 @@ def search_foods(query: str, profile_id: str | None = None, limit: int = 20) -> 
             reverse=True,
         )[:3]
 
-        # Boost score for culturally relevant foods
         name_lower = food["description"].lower()
-        if cuisine_keywords and any(kw in name_lower for kw in cuisine_keywords):
-            scaled = min(100.0, scaled + 15.0)
+        cuisine_match = int(bool(cuisine_keywords and any(kw in name_lower for kw in cuisine_keywords)))
 
-        results.append({
+        feature_rows.append(
+            build_feature_row(
+                nutrient_amounts=nutrients,
+                dv=dv,
+                heuristic_score=raw,
+                price_data=price_data,
+                cuisine_match=cuisine_match,
+                health_conditions=health_conditions,
+                health_goals=health_goals,
+            )
+        )
+
+        base_rows.append({
             "fdc_id": fid,
             "name": food["description"],
             "data_type": food["data_type"],
-            "score": scaled,
+            "heuristic_score_scaled": scaled_heuristic,
             "top_nutrients": [_NUTRIENT_LABELS.get(k, k) for k in top],
         })
 
+    if _ML_RANKER is not None and feature_rows:
+        feature_df = pd.DataFrame(feature_rows)
+        ml_scores = predict_scores(_ML_RANKER, feature_df)
+        final_scores = blend_scores(
+            [row["heuristic_score_scaled"] for row in base_rows],
+            ml_scores,
+            alpha=0.70,
+        )
+
+        for row, ml_score, final_score in zip(base_rows, ml_scores, final_scores):
+            row["score"] = round(float(final_score) * 100.0, 1)
+            row["ml_score"] = round(float(ml_score), 4)
+            results.append(row)
+    else:
+        for row in base_rows:
+            row["score"] = row["heuristic_score_scaled"]
+            row["ml_score"] = None
+            results.append(row)
+
     results.sort(key=lambda x: x["score"], reverse=True)
-    return results[:limit]
+
+    return [
+        {
+            "fdc_id": r["fdc_id"],
+            "name": r["name"],
+            "data_type": r["data_type"],
+            "score": r["score"],
+            "top_nutrients": r["top_nutrients"],
+        }
+        for r in results[:limit]
+    ]
